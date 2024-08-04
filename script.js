@@ -1,78 +1,45 @@
-let questionCount = 0;
-
-function addQuestion() {
-    questionCount++;
-    const questionContainer = document.createElement('div');
-    questionContainer.classList.add('question');
-    questionContainer.innerHTML = `
-        <h3>問題 ${questionCount}</h3>
-        <input type="text" class="question-text" placeholder="輸入問題">
-        <input type="number" class="max-options" min="1" placeholder="最大可選數量">
-        <div class="options"></div>
-        <button onclick="addOption(this)">添加選項</button>
-        <button onclick="removeQuestion(this)">刪除問題</button>
-    `;
-    document.getElementById('questions-container').appendChild(questionContainer);
-}
-
-function addOption(button) {
-    const optionsContainer = button.parentElement.querySelector('.options');
-    const optionDiv = document.createElement('div');
-    optionDiv.classList.add('option');
-    optionDiv.innerHTML = `
-        <input type="text" placeholder="選項文字">
-        <button onclick="removeOption(this)">刪除</button>
-    `;
-    optionsContainer.appendChild(optionDiv);
-}
-
-function removeQuestion(button) {
-    button.parentElement.remove();
-}
-
-function removeOption(button) {
-    button.parentElement.remove();
-}
+// script.js
+document.addEventListener('DOMContentLoaded', function() {
+    generateSurvey();
+    document.getElementById('submit-survey').addEventListener('click', submitSurvey);
+});
 
 function generateSurvey() {
-    const surveyContent = document.getElementById('survey-content');
-    surveyContent.innerHTML = '';
-    const questions = document.querySelectorAll('.question');
+    document.getElementById('survey-title').textContent = surveyConfig.title;
+    const questionsContainer = document.getElementById('questions-container');
 
-    questions.forEach((question, index) => {
-        const questionText = question.querySelector('.question-text').value;
-        const maxOptions = question.querySelector('.max-options').value;
-        const options = question.querySelectorAll('.option input[type="text"]');
-        
+    surveyConfig.questions.forEach((question, index) => {
         const questionDiv = document.createElement('div');
+        questionDiv.classList.add('question');
         questionDiv.innerHTML = `
-            <h3>問題 ${index + 1}: ${questionText}</h3>
-            <p>（最多選擇 ${maxOptions} 項）</p>
+            <h3>問題 ${index + 1}: ${question.text}</h3>
+            <p>（最多選擇 ${question.maxSelect} 項）</p>
             <div class="options"></div>
         `;
 
         const optionsContainer = questionDiv.querySelector('.options');
-        options.forEach(option => {
+        question.options.forEach((option, optionIndex) => {
             const optionDiv = document.createElement('div');
+            optionDiv.classList.add('option');
             optionDiv.innerHTML = `
-                <input type="checkbox" name="q${index}" value="${option.value}">
-                <label>${option.value}</label>
+                <img src="${option.image}" alt="${option.text}">
+                <input type="checkbox" name="q${index}" value="${option.text}" id="q${index}o${optionIndex}">
+                <label for="q${index}o${optionIndex}">${option.text}</label>
             `;
             optionsContainer.appendChild(optionDiv);
         });
 
-        surveyContent.appendChild(questionDiv);
+        questionsContainer.appendChild(questionDiv);
     });
 
-    document.getElementById('survey-preview').style.display = 'block';
     addCheckboxLimit();
 }
 
 function addCheckboxLimit() {
-    const questions = document.querySelectorAll('#survey-content > div');
-    questions.forEach(question => {
+    const questions = document.querySelectorAll('.question');
+    questions.forEach((question, index) => {
         const checkboxes = question.querySelectorAll('input[type="checkbox"]');
-        const maxAllowed = parseInt(question.querySelector('p').textContent.match(/\d+/)[0]);
+        const maxAllowed = surveyConfig.questions[index].maxSelect;
 
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', function() {
@@ -88,5 +55,46 @@ function addCheckboxLimit() {
     });
 }
 
-document.getElementById('add-question').addEventListener('click', addQuestion);
-document.getElementById('generate-survey').addEventListener('click', generateSurvey);
+function submitSurvey() {
+    const answers = [];
+    surveyConfig.questions.forEach((question, index) => {
+        const checkedOptions = document.querySelectorAll(`input[name="q${index}"]:checked`);
+        const answer = Array.from(checkedOptions).map(option => option.value);
+        answers.push(answer);
+    });
+
+    // 這裡我們將使用 Google Sheets API 來保存數據
+    // 注意：您需要設置 Google Sheets API 並獲取必要的憑證
+    saveToGoogleSheets(answers);
+}
+
+function saveToGoogleSheets(answers) {
+    // 這裡需要您的 Google Sheets API 設置
+    // 包括 API 密鑰、表格 ID 等
+    const API_KEY = 'YOUR_API_KEY';
+    const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
+    const RANGE = 'Sheet1!A:A'; // 根據您的需求調整範圍
+
+    gapi.load('client', () => {
+        gapi.client.init({
+            apiKey: API_KEY,
+            discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
+        }).then(() => {
+            gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_ID,
+                range: RANGE,
+                valueInputOption: 'RAW',
+                insertDataOption: 'INSERT_ROWS',
+                resource: {
+                    values: [answers.map(ans => ans.join(', '))]
+                }
+            }).then((response) => {
+                console.log('數據已保存到 Google Sheets');
+                alert('感謝您的參與！您的回答已經被記錄。');
+            }, (error) => {
+                console.error('保存數據時出錯', error);
+                alert('抱歉，保存您的回答時出現了問題。請稍後再試。');
+            });
+        });
+    });
+}
